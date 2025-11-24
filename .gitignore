@@ -1,0 +1,8 @@
+data/*.txt
+**/*.png
+data/text8
+__pycache__/
+.venv/
+**/*.pt
+**/*.gexf
+**/*.html
