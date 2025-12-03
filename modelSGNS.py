@@ -88,6 +88,39 @@ class SkipGramModel(nn.Module):
 
         self.word_emb:nn.Embedding = nn.Embedding.from_pretrained(word_weights)
         self.con_emb:nn.Embedding = nn.Embedding.from_pretrained(con_weight)
+        
+class OnlyOneEmb(nn.Module):
+    def __init__(self, emb_size:int, embedding_dimension:int=15, context_dimension:int|None=None, init_range:float|None=None, sparse:bool=True, device="cpu"):
+        super().__init__()
+        self.emb_size:int = emb_size
+        self.emb_dim:int = embedding_dimension
+        self.word_emb:nn.Embedding = nn.Embedding(num_embeddings=self.emb_size, embedding_dim=self.emb_dim, device=device, sparse=sparse)
+
+        if init_range is None:
+            init_range = 0.5 / self.emb_dim
+        self.word_emb.weight.data.uniform_(-init_range, init_range)
+
+    def forward(self, centrals_words:list|torch.Tensor, pos_context:list|torch.Tensor, neg_context:list|torch.Tensor):
+        words_emb:torch.Tensor = self.word_emb(centrals_words)
+        context_emb:torch.Tensor = self.word_emb(pos_context)
+        neg_emb:torch.Tensor = self.word_emb(neg_context)
+
+        pos_score = torch.sum(words_emb * context_emb, dim=1)
+        pos_loss = F.logsigmoid(pos_score)
+
+        neg_score = torch.bmm(neg_emb, words_emb.unsqueeze(-1)).squeeze(2)
+        neg_loss = F.logsigmoid(-neg_score).sum(1)
+
+        loss = -(pos_loss + neg_loss).mean()
+        return loss
+    
+    def save_weight(self, path:str="SGNS_weights/"):
+        word_weights = self.word_emb.weight.detach().cpu()
+        torch.save(word_weights, path+'word_embedding.pt')
+
+    def load_weight(self, path:str="SGNS_weights/", name_word_weights:str="word_embedding.pt"):
+        word_weights = torch.load(path + name_word_weights)
+        self.word_emb:nn.Embedding = nn.Embedding.from_pretrained(word_weights)
 
 # La fonction d’entraînement classique
 def train_Word2Vec(modelW2V:nn.Module, dataLoader:Dataset, optimizer:optim.Optimizer, epochs:int, verbal:bool=True, log_interval=100, device="cpu"):

@@ -20,17 +20,20 @@ import plotly.graph_objects as go
 
 from copy import deepcopy
 
-def interactive_embedding_plot_3D(embedding: Embedding,
-                               encoder: dict,
-                               decoder:dict,
-                               words: Optional[Sequence[str]] = None,
-                               method: Optional[str] = "pca",            # "pca" or "tsne" or None
-                               n_components: int = 3,
-                               tsne_params: dict = None,
-                               top_k_neighbors: int = 10,
-                               query_word: Optional[List[str]|str] = None,
-                               show_only: Optional[Sequence[str]] = None,
-                               title: Optional[str] = None) -> go.Figure :
+
+def interactive_embedding_plot_3D(
+    embedding: Embedding,
+    encoder: dict,
+    decoder: dict,
+    words: Optional[Sequence[str]] = None,
+    method: Optional[str] = "pca",  # "pca" or "tsne" or None
+    n_components: int = 3,
+    tsne_params: dict = None,
+    top_k_neighbors: int = 10,
+    query_word: Optional[List[str] | str] = None,
+    show_only: Optional[Sequence[str]] = None,
+    title: Optional[str] = None,
+) -> go.Figure:
     """
     Trace un scatter interactif (Plotly) des embeddings.
     - embedding: nn.Embedding (poids seront copiés en cpu)
@@ -65,27 +68,39 @@ def interactive_embedding_plot_3D(embedding: Embedding,
         pca = PCA(n_components=n_components)
         X = pca.fit_transform(W)
     elif method.lower() == "tsne":
-        tsne_params = tsne_params or {"perplexity": 30, "n_iter": 1000, "init": "pca", "learning_rate": 200}
+        tsne_params = tsne_params or {
+            "perplexity": 30,
+            "n_iter": 1000,
+            "init": "pca",
+            "learning_rate": 200,
+        }
         tsne = TSNE(n_components=n_components, **tsne_params)
         X = tsne.fit_transform(W)
     else:
         raise ValueError("method must be 'pca' or 'tsne' or None")
 
     # Construire dataframe-like arrays
-    xs = X[:,0]
-    ys = X[:,1]
-    zs = X[:,2]
+    xs = X[:, 0]
+    ys = X[:, 1]
+    zs = X[:, 2]
     labels = words
 
     # Préparer hover text (word + optional nearest neighbors cos sim quick)
     hover_text = []
- 
+
     for w in labels:
         hover_text.append(w)
 
-    fig:go.Figure = px.scatter_3d(x=xs, y=ys, z=zs, hover_name=labels, title=(title or "Embeddings 3D"),
-                    width=1000, height=800)
-    
+    fig: go.Figure = px.scatter_3d(
+        x=xs,
+        y=ys,
+        z=zs,
+        hover_name=labels,
+        title=(title or "Embeddings 3D"),
+        width=1000,
+        height=800,
+    )
+
     # add invisible text markers for readability; show points as small markers
     fig.update_traces(marker=dict(size=4, opacity=0.8))
 
@@ -96,7 +111,9 @@ def interactive_embedding_plot_3D(embedding: Embedding,
         # compute cosine similarities between query embedding and all displayed embeddings
         with torch.no_grad():
             query_idx = encoder[query_word]
-            query_vec = embedding.weight.cpu().numpy()[query_idx:query_idx+1]  # [1, D]
+            query_vec = embedding.weight.cpu().numpy()[
+                query_idx : query_idx + 1
+            ]  # [1, D]
             sims = cosine_similarity(query_vec, W).flatten()  # [N]
             # get top_k indices (exclude itself if present)
             order = np.argsort(-sims)
@@ -109,25 +126,47 @@ def interactive_embedding_plot_3D(embedding: Embedding,
         # highlight query point (if it's in displayed words)
         if query_word in labels:
             qpos = labels.index(query_word)
-            fig.add_trace(go.Scatter3d(x=[xs[qpos]], y=[ys[qpos]], z=[zs[qpos]],
-                           mode='markers+text',
-                           marker=dict(size=8, color='red', symbol='diamond'),
-                           text=[query_word], textposition='top center', name=f'query {query_word}'))
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[xs[qpos]],
+                    y=[ys[qpos]],
+                    z=[zs[qpos]],
+                    mode="markers+text",
+                    marker=dict(size=8, color="red", symbol="diamond"),
+                    text=[query_word],
+                    textposition="top center",
+                    name=f"query {query_word}",
+                )
+            )
         # draw neighbors and lines
         for i, ni in enumerate(topk):
             if labels[ni] == query_word:
                 continue
-            fig.add_trace(go.Scatter3d(x=[xs[ni]], y=[ys[ni]], z=[zs[ni]],
-                           mode='markers+text',
-                           marker=dict(size=6, color='orange'),
-                           text=[labels[ni]], textposition='top center',
-                           name=f'neighbor_{i} (sim={neighbor_sims[i]:.3f}) {decoder[ni]}'))
-            
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[xs[ni]],
+                    y=[ys[ni]],
+                    z=[zs[ni]],
+                    mode="markers+text",
+                    marker=dict(size=6, color="orange"),
+                    text=[labels[ni]],
+                    textposition="top center",
+                    name=f"neighbor_{i} (sim={neighbor_sims[i]:.3f}) {decoder[ni]}",
+                )
+            )
+
             # line from query to neighbor if query is displayed
             if query_word in labels:
-                fig.add_trace(go.Scatter3d(x=[xs[qpos], xs[ni]], y=[ys[qpos], ys[ni]], z=[zs[qpos], zs[ni]],
-                           mode='lines', line=dict(width=2, color='gray'), showlegend=False))
-    
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=[xs[qpos], xs[ni]],
+                        y=[ys[qpos], ys[ni]],
+                        z=[zs[qpos], zs[ni]],
+                        mode="lines",
+                        line=dict(width=2, color="gray"),
+                        showlegend=False,
+                    )
+                )
 
     max_range = np.max(np.ptp(X, axis=0))  # plage maximale sur les composants projetés
     if max_range == 0:
@@ -137,14 +176,32 @@ def interactive_embedding_plot_3D(embedding: Embedding,
     # axes X, Y, Z : lignes de -scale à +scale
     axes_traces = [
         # X axis (rouge)
-        go.Scatter3d(x=[-scale, scale], y=[0, 0], z=[0, 0],
-                     mode='lines', line=dict(color='red', width=4), name='axis X'),
+        go.Scatter3d(
+            x=[-scale, scale],
+            y=[0, 0],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="red", width=4),
+            name="axis X",
+        ),
         # Y axis (vert)
-        go.Scatter3d(x=[0, 0], y=[-scale, scale], z=[0, 0],
-                     mode='lines', line=dict(color='green', width=4), name='axis Y'),
+        go.Scatter3d(
+            x=[0, 0],
+            y=[-scale, scale],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="green", width=4),
+            name="axis Y",
+        ),
         # Z axis (bleu)
-        go.Scatter3d(x=[0, 0], y=[0, 0], z=[-scale, scale],
-                     mode='lines', line=dict(color='blue', width=4), name='axis Z'),
+        go.Scatter3d(
+            x=[0, 0],
+            y=[0, 0],
+            z=[-scale, scale],
+            mode="lines",
+            line=dict(color="blue", width=4),
+            name="axis Z",
+        ),
     ]
 
     # flèches aux extrémités (petits segments pour simuler des flèches) et labels
@@ -152,63 +209,135 @@ def interactive_embedding_plot_3D(embedding: Embedding,
     arrow_traces = []
     labels_traces = []
     # X positive arrow
-    arrow_traces.append(go.Scatter3d(x=[scale, scale - arrow_len], y=[0, 0], z=[0, 0],
-                                     mode='lines', line=dict(color='red', width=6), showlegend=False))
-    labels_traces.append(go.Scatter3d(x=[scale], y=[0], z=[0], mode='text',
-                                      text=['X'], textposition='top center', showlegend=False))
+    arrow_traces.append(
+        go.Scatter3d(
+            x=[scale, scale - arrow_len],
+            y=[0, 0],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="red", width=6),
+            showlegend=False,
+        )
+    )
+    labels_traces.append(
+        go.Scatter3d(
+            x=[scale],
+            y=[0],
+            z=[0],
+            mode="text",
+            text=["X"],
+            textposition="top center",
+            showlegend=False,
+        )
+    )
     # Y positive arrow
-    arrow_traces.append(go.Scatter3d(x=[0, 0], y=[scale, scale - arrow_len], z=[0, 0],
-                                     mode='lines', line=dict(color='green', width=6), showlegend=False))
-    labels_traces.append(go.Scatter3d(x=[0], y=[scale], z=[0], mode='text',
-                                      text=['Y'], textposition='top center', showlegend=False))
+    arrow_traces.append(
+        go.Scatter3d(
+            x=[0, 0],
+            y=[scale, scale - arrow_len],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="green", width=6),
+            showlegend=False,
+        )
+    )
+    labels_traces.append(
+        go.Scatter3d(
+            x=[0],
+            y=[scale],
+            z=[0],
+            mode="text",
+            text=["Y"],
+            textposition="top center",
+            showlegend=False,
+        )
+    )
     # Z positive arrow
-    arrow_traces.append(go.Scatter3d(x=[0, 0], y=[0, 0], z=[scale, scale - arrow_len],
-                                     mode='lines', line=dict(color='blue', width=6), showlegend=False))
-    labels_traces.append(go.Scatter3d(x=[0], y=[0], z=[scale], mode='text',
-                                      text=['Z'], textposition='top center', showlegend=False))
+    arrow_traces.append(
+        go.Scatter3d(
+            x=[0, 0],
+            y=[0, 0],
+            z=[scale, scale - arrow_len],
+            mode="lines",
+            line=dict(color="blue", width=6),
+            showlegend=False,
+        )
+    )
+    labels_traces.append(
+        go.Scatter3d(
+            x=[0],
+            y=[0],
+            z=[scale],
+            mode="text",
+            text=["Z"],
+            textposition="top center",
+            showlegend=False,
+        )
+    )
 
     # ajouter toutes les traces au fig
     for t in axes_traces + arrow_traces + labels_traces:
         fig.add_trace(t)
 
-
-    fig.update_layout(scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3'))
+    fig.update_layout(
+        scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="PC3")
+    )
     return fig
 
-def components_to_fig_3D(components, encoder:dict, highlight_words:Optional[List]=None, words_display:Optional[List]=None,
-                        nb_neighbors:int=2, title:str="figure of vector", _min:float=-5, _max:float=5, base_color:dict={}) -> go.Figure :
-    """
-    """
+
+def components_to_fig_3D(
+    components,
+    encoder: dict,
+    highlight_words: Optional[List] = None,
+    words_display: Optional[List] = None,
+    nb_neighbors: int = 2,
+    title: str = "figure of vector",
+    _min: float | None = None,
+    _max: float | None = None,
+    base_color: dict = {},
+) -> go.Figure:
+    """ """
     if words_display is None:
         words_display = list(encoder.keys())
+        words_display = words_display[0 : components.shape[0]]
 
     # Construire la matrice d'embeddings [N, D]
     idxs = [encoder[w] for w in words_display]
 
     # Keep only components of words_display
     components_wd = components[idxs]
-    xs = components_wd[:,0]
-    ys = components_wd[:,1]
-    zs = components_wd[:,2]
+    xs = components_wd[:, 0]
+    ys = components_wd[:, 1]
+    zs = components_wd[:, 2]
 
-    fig:go.Figure = px.scatter_3d(x=xs, y=ys, z=zs, hover_name=words_display, title=title,
-                    width=1000, height=800)
-    
+    if _min is None or _max is None:
+        max_abs_val = np.max(np.abs(components_wd))
+        limit = max_abs_val * 1.1
+
+        if _min is None:
+            _min = -limit
+        if _max is None:
+            _max = limit
+
+    fig: go.Figure = px.scatter_3d(
+        x=xs, y=ys, z=zs, hover_name=words_display, title=title, width=1000, height=800
+    )
+
     # add invisible text markers for readability; show points as small markers
     fig.update_traces(marker=dict(size=4, opacity=0.8))
 
     # If query_word provided, highlight it and its neighbors
-    pos_map = {w:i for i, w in enumerate(words_display)}
+    pos_map = {w: i for i, w in enumerate(words_display)}
 
     if highlight_words is not None:
         # compute cosine similarities between query embedding and all displayed embeddings
         for w in highlight_words:
             if w in base_color:
                 color_word, color_neighbor = base_color[w]
-            else :
-                color_word, color_neighbor = ('red', 'orange')
+            else:
+                color_word, color_neighbor = ("red", "orange")
             query_idx = encoder[w]
-            query_vec = components[query_idx:query_idx+1]  # [1, D]
+            query_vec = components[query_idx : query_idx + 1]  # [1, D]
             sims = cosine_similarity(query_vec, components_wd).flatten()  # [N]
             # get top_k indices (exclude itself if present)
             order = np.argsort(-sims)
@@ -222,26 +351,48 @@ def components_to_fig_3D(components, encoder:dict, highlight_words:Optional[List
             qpos = pos_map.get(w, None)
             if qpos is None:
                 continue
-            fig.add_trace(go.Scatter3d(x=[xs[qpos]], y=[ys[qpos]], z=[zs[qpos]],
-                        mode='markers+text',
-                        marker=dict(size=8, color=color_word, symbol='diamond'),
-                        text=[w], textposition='top center', name=f'query {w}'))
-            
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[xs[qpos]],
+                    y=[ys[qpos]],
+                    z=[zs[qpos]],
+                    mode="markers+text",
+                    marker=dict(size=4, color=color_word, symbol="diamond"),
+                    text=[w],
+                    textposition="top center",
+                    name=f"query {w}",
+                )
+            )
+
             # draw neighbors and lines
             for i, ni in enumerate(topk):
                 if words_display[ni] == w:
                     continue
-                fig.add_trace(go.Scatter3d(x=[xs[ni]], y=[ys[ni]], z=[zs[ni]],
-                            mode='markers+text',
-                            marker=dict(size=6, color=color_neighbor),
-                            text=[words_display[ni]], textposition='top center',
-                            name=f'neighbor_{i} (sim={neighbor_sims[i]:.3f}) {words_display[ni]}'))
-                
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=[xs[ni]],
+                        y=[ys[ni]],
+                        z=[zs[ni]],
+                        mode="markers+text",
+                        marker=dict(size=6, color=color_neighbor),
+                        text=[words_display[ni]],
+                        textposition="top center",
+                        name=f"neighbor_{i} (sim={neighbor_sims[i]:.3f}) {words_display[ni]}",
+                    )
+                )
+
                 # line from query to neighbor if query is displayed
                 if w in words_display:
-                    fig.add_trace(go.Scatter3d(x=[xs[qpos], xs[ni]], y=[ys[qpos], ys[ni]], z=[zs[qpos], zs[ni]],
-                            mode='lines', line=dict(width=2, color='gray'), showlegend=False))
-    
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=[xs[qpos], xs[ni]],
+                            y=[ys[qpos], ys[ni]],
+                            z=[zs[qpos], zs[ni]],
+                            mode="lines",
+                            line=dict(width=2, color="gray"),
+                            showlegend=False,
+                        )
+                    )
 
     max_range = np.max(np.ptp(components_wd, axis=0))
     if max_range == 0:
@@ -249,45 +400,124 @@ def components_to_fig_3D(components, encoder:dict, highlight_words:Optional[List
     scale = max_range * 0.05
 
     axes_traces = [
-        go.Scatter3d(x=[-scale, scale], y=[0, 0], z=[0, 0],
-                     mode='lines', line=dict(color='red', width=4), name='axis X'),
-        go.Scatter3d(x=[0, 0], y=[-scale, scale], z=[0, 0],
-                     mode='lines', line=dict(color='green', width=4), name='axis Y'),
-        go.Scatter3d(x=[0, 0], y=[0, 0], z=[-scale, scale],
-                     mode='lines', line=dict(color='blue', width=4), name='axis Z'),
+        go.Scatter3d(
+            x=[-scale, scale],
+            y=[0, 0],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="red", width=4),
+            name="axis X",
+        ),
+        go.Scatter3d(
+            x=[0, 0],
+            y=[-scale, scale],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="green", width=4),
+            name="axis Y",
+        ),
+        go.Scatter3d(
+            x=[0, 0],
+            y=[0, 0],
+            z=[-scale, scale],
+            mode="lines",
+            line=dict(color="blue", width=4),
+            name="axis Z",
+        ),
     ]
 
     arrow_len = scale * 0.008
     arrow_traces = []
     labels_traces = []
-    arrow_traces.append(go.Scatter3d(x=[scale, scale - arrow_len], y=[0, 0], z=[0, 0],
-                                     mode='lines', line=dict(color='red', width=6), showlegend=False))
-    labels_traces.append(go.Scatter3d(x=[scale], y=[0], z=[0], mode='text',
-                                      text=['X'], textposition='top center', showlegend=False))
-    arrow_traces.append(go.Scatter3d(x=[0, 0], y=[scale, scale - arrow_len], z=[0, 0],
-                                     mode='lines', line=dict(color='green', width=6), showlegend=False))
-    labels_traces.append(go.Scatter3d(x=[0], y=[scale], z=[0], mode='text',
-                                      text=['Y'], textposition='top center', showlegend=False))
-    arrow_traces.append(go.Scatter3d(x=[0, 0], y=[0, 0], z=[scale, scale - arrow_len],
-                                     mode='lines', line=dict(color='blue', width=6), showlegend=False))
-    labels_traces.append(go.Scatter3d(x=[0], y=[0], z=[scale], mode='text',
-                                      text=['Z'], textposition='top center', showlegend=False))
+    arrow_traces.append(
+        go.Scatter3d(
+            x=[scale, scale - arrow_len],
+            y=[0, 0],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="red", width=6),
+            showlegend=False,
+        )
+    )
+    labels_traces.append(
+        go.Scatter3d(
+            x=[scale],
+            y=[0],
+            z=[0],
+            mode="text",
+            text=["X"],
+            textposition="top center",
+            showlegend=False,
+        )
+    )
+    arrow_traces.append(
+        go.Scatter3d(
+            x=[0, 0],
+            y=[scale, scale - arrow_len],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="green", width=6),
+            showlegend=False,
+        )
+    )
+    labels_traces.append(
+        go.Scatter3d(
+            x=[0],
+            y=[scale],
+            z=[0],
+            mode="text",
+            text=["Y"],
+            textposition="top center",
+            showlegend=False,
+        )
+    )
+    arrow_traces.append(
+        go.Scatter3d(
+            x=[0, 0],
+            y=[0, 0],
+            z=[scale, scale - arrow_len],
+            mode="lines",
+            line=dict(color="blue", width=6),
+            showlegend=False,
+        )
+    )
+    labels_traces.append(
+        go.Scatter3d(
+            x=[0],
+            y=[0],
+            z=[scale],
+            mode="text",
+            text=["Z"],
+            textposition="top center",
+            showlegend=False,
+        )
+    )
 
     for t in axes_traces + arrow_traces + labels_traces:
         fig.add_trace(t)
 
-
-    fig.update_layout(scene=dict(
-            xaxis=dict(nticks=4, range=[_min, _max], title='PC1'),
-            yaxis=dict(nticks=4, range=[_min, _max], title='PC2'),
-            zaxis=dict(nticks=4, range=[_min, _max], title='PC3')
-        ), scene_aspectmode='cube')
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(nticks=4, range=[_min, _max], title="PC1"),
+            yaxis=dict(nticks=4, range=[_min, _max], title="PC2"),
+            zaxis=dict(nticks=4, range=[_min, _max], title="PC3"),
+        ),
+        scene_aspectmode="cube",
+    )
     return fig
 
 
-def components_to_fig_3D_animation(history_components, encoder:dict, highlight_words:Optional[List]=None, 
-                                words_display:Optional[List]=None, nb_neighbors:int=2, title:str="figure of vector",
-                                _min:float=-5, _max:float=5, base_color:dict={}) -> go.Figure :
+def components_to_fig_3D_animation(
+    history_components,
+    encoder: dict,
+    highlight_words: Optional[List] = None,
+    words_display: Optional[List] = None,
+    nb_neighbors: int = 2,
+    title: str = "figure of vector",
+    _min: float | None = None,
+    _max: float | None = None,
+    base_color: dict = {},
+) -> go.Figure:
     """
     Crée une animation 3D de l'évolution de l'embedding.
     Utilise ta fonction existante components_to_fig_3D pour chaque frame.
@@ -309,6 +539,20 @@ def components_to_fig_3D_animation(history_components, encoder:dict, highlight_w
     fig : go.Figure
         Animation 3D Plotly
     """
+    if words_display is None:
+        words_display = list(encoder.keys())
+
+    if _min is None or _max is None:
+        idxs = [encoder[w] for w in words_display]
+        
+        global_max_abs = np.max([np.max(np.abs(comp[idxs])) for comp in history_components])
+        
+        limit = global_max_abs * 1.1
+        
+        if _min is None: _min = -limit
+        if _max is None: _max = limit
+    
+    
     frames = []
     for step, comp in enumerate(history_components):
         base_fig = components_to_fig_3D(
@@ -318,13 +562,13 @@ def components_to_fig_3D_animation(history_components, encoder:dict, highlight_w
             words_display=words_display,
             nb_neighbors=nb_neighbors,
             title=f"{title} — step {step}",
-            _min=_min, _max=_max, base_color=base_color
+            _min=_min,
+            _max=_max,
+            base_color=base_color,
         )
         frame_traces = deepcopy(base_fig.data)
 
-        frames.append(
-            go.Frame(data=frame_traces, name=f"step_{step}")
-        )
+        frames.append(go.Frame(data=frame_traces, name=f"step_{step}"))
 
     init_fig = components_to_fig_3D(
         components=history_components[-1],
@@ -332,15 +576,13 @@ def components_to_fig_3D_animation(history_components, encoder:dict, highlight_w
         highlight_words=highlight_words,
         words_display=words_display,
         nb_neighbors=nb_neighbors,
-        title=title, base_color=base_color,
-        _min=_min, _max=_max
+        title=title,
+        base_color=base_color,
+        _min=_min,
+        _max=_max,
     )
 
-    fig = go.Figure(
-        data=deepcopy(init_fig.data),
-        layout=init_fig.layout,
-        frames=frames
-    )
+    fig = go.Figure(data=deepcopy(init_fig.data), layout=init_fig.layout, frames=frames)
 
     fig.update_layout(
         updatemenus=[
@@ -348,39 +590,46 @@ def components_to_fig_3D_animation(history_components, encoder:dict, highlight_w
                 "type": "buttons",
                 "buttons": [
                     {"label": "▶ Play", "method": "animate", "args": [None]},
-                    {"label": "⏸ Pause", "method": "animate",
-                     "args": [[None], {"frame": {"duration": 0}}]}
+                    {
+                        "label": "⏸ Pause",
+                        "method": "animate",
+                        "args": [[None], {"frame": {"duration": 0}}],
+                    },
                 ],
-                "x": 0.1, "y": 1.1,
-                "showactive": False
+                "x": 0.1,
+                "y": 1.1,
+                "showactive": False,
             }
         ],
-        sliders=[{
-            "pad": {"b": 10},
-            "steps": [
-                {"label": f"{i}",
-                 "method": "animate",
-                 "args": [[f"step_{i}"]]}
-                for i in range(len(history_components))
-            ]
-        }]
+        sliders=[
+            {
+                "pad": {"b": 10},
+                "steps": [
+                    {"label": f"{i}", "method": "animate", "args": [[f"step_{i}"]]}
+                    for i in range(len(history_components))
+                ],
+            }
+        ],
     )
 
     fig.show()
 
-    return fig   
+    return fig
 
-def interactive_embedding_plot_2D(embedding: torch.nn.Embedding,
-                               encoder: dict,
-                               decoder:dict,
-                               words: Optional[Sequence[str]] = None,
-                               method: Optional[str] = "pca",            # "pca" or "tsne" or None
-                               n_components: int = 2,
-                               tsne_params: dict = None,
-                               top_k_neighbors: int = 10,
-                               query_word: Optional[List[str]|str] = None,
-                               show_only: Optional[Sequence[str]] = None,
-                               title: Optional[str] = None):
+
+def interactive_embedding_plot_2D(
+    embedding: torch.nn.Embedding,
+    encoder: dict,
+    decoder: dict,
+    words: Optional[Sequence[str]] = None,
+    method: Optional[str] = "pca",  # "pca" or "tsne" or None
+    n_components: int = 2,
+    tsne_params: dict = None,
+    top_k_neighbors: int = 10,
+    query_word: Optional[List[str] | str] = None,
+    show_only: Optional[Sequence[str]] = None,
+    title: Optional[str] = None,
+):
     """
     Trace un scatter interactif (Plotly) des embeddings.
     - embedding: nn.Embedding (poids seront copiés en cpu)
@@ -414,7 +663,12 @@ def interactive_embedding_plot_2D(embedding: torch.nn.Embedding,
         pca = PCA(n_components=n_components)
         X = pca.fit_transform(W)
     elif method.lower() == "tsne":
-        tsne_params = tsne_params or {"perplexity": 30, "n_iter": 1000, "init": "pca", "learning_rate": 200}
+        tsne_params = tsne_params or {
+            "perplexity": 30,
+            "n_iter": 1000,
+            "init": "pca",
+            "learning_rate": 200,
+        }
         tsne = TSNE(n_components=n_components, **tsne_params)
         X = tsne.fit_transform(W)
     elif method is None:
@@ -439,11 +693,18 @@ def interactive_embedding_plot_2D(embedding: torch.nn.Embedding,
     for w in labels:
         hover_text.append(w)
 
-    fig = px.scatter(x=xs, y=ys, text=["" for _ in labels], hover_name=labels,
-                     title=(title or "Embeddings"), width=900, height=700)
+    fig = px.scatter(
+        x=xs,
+        y=ys,
+        text=["" for _ in labels],
+        hover_name=labels,
+        title=(title or "Embeddings"),
+        width=900,
+        height=700,
+    )
 
     # add invisible text markers for readability; show points as small markers
-    fig.update_traces(marker=dict(size=6, opacity=0.8), selector=dict(mode='markers'))
+    fig.update_traces(marker=dict(size=6, opacity=0.8), selector=dict(mode="markers"))
 
     # If query_word provided, highlight it and its neighbors
     if query_word is not None:
@@ -452,7 +713,9 @@ def interactive_embedding_plot_2D(embedding: torch.nn.Embedding,
         # compute cosine similarities between query embedding and all displayed embeddings
         with torch.no_grad():
             query_idx = encoder[query_word]
-            query_vec = embedding.weight.cpu().numpy()[query_idx:query_idx+1]  # [1, D]
+            query_vec = embedding.weight.cpu().numpy()[
+                query_idx : query_idx + 1
+            ]  # [1, D]
             sims = cosine_similarity(query_vec, W).flatten()  # [N]
             # get top_k indices (exclude itself if present)
             order = np.argsort(-sims)
@@ -465,39 +728,57 @@ def interactive_embedding_plot_2D(embedding: torch.nn.Embedding,
         # highlight query point (if it's in displayed words)
         if query_word in labels:
             qpos = labels.index(query_word)
-            fig.add_trace(go.Scatter(x=[xs[qpos]], y=[ys[qpos]],
-                                     mode='markers+text',
-                                     marker=dict(size=12, color='red', symbol='diamond'),
-                                     text=[query_word],
-                                     textposition='top center',
-                                     hoverinfo='skip',
-                                     name=f'query {query_word}'))
+            fig.add_trace(
+                go.Scatter(
+                    x=[xs[qpos]],
+                    y=[ys[qpos]],
+                    mode="markers+text",
+                    marker=dict(size=12, color="red", symbol="diamond"),
+                    text=[query_word],
+                    textposition="top center",
+                    hoverinfo="skip",
+                    name=f"query {query_word}",
+                )
+            )
         # draw neighbors and lines
         for i, ni in enumerate(topk):
             if labels[ni] == query_word:
                 continue
-            fig.add_trace(go.Scatter(x=[xs[ni]], y=[ys[ni]],
-                                     mode='markers+text',
-                                     marker=dict(size=9, color='orange'),
-                                     text=[labels[ni]],
-                                     textposition='top center',
-                                     name=f'neighbor_{i} (sim={neighbor_sims[i]:.3f}) {decoder[ni]}'))
+            fig.add_trace(
+                go.Scatter(
+                    x=[xs[ni]],
+                    y=[ys[ni]],
+                    mode="markers+text",
+                    marker=dict(size=9, color="orange"),
+                    text=[labels[ni]],
+                    textposition="top center",
+                    name=f"neighbor_{i} (sim={neighbor_sims[i]:.3f}) {decoder[ni]}",
+                )
+            )
             # line from query to neighbor if query is displayed
             if query_word in labels:
-                fig.add_trace(go.Scatter(x=[xs[qpos], xs[ni]], y=[ys[qpos], ys[ni]],
-                                         mode='lines',
-                                         line=dict(width=1, color='grey'),
-                                         hoverinfo='none',
-                                         showlegend=False))
+                fig.add_trace(
+                    go.Scatter(
+                        x=[xs[qpos], xs[ni]],
+                        y=[ys[qpos], ys[ni]],
+                        mode="lines",
+                        line=dict(width=1, color="grey"),
+                        hoverinfo="none",
+                        showlegend=False,
+                    )
+                )
 
-    fig.update_layout(clickmode='event+select')
+    fig.update_layout(clickmode="event+select")
     fig.show()
     return fig
 
-def plot_similarity_heatmap(embedding: torch.nn.Embedding, encoder: dict, words: list[str], figsize=(10, 8)):
+
+def plot_similarity_heatmap(
+    embedding: torch.nn.Embedding, encoder: dict, words: list[str], figsize=(10, 8)
+):
     """
     Produit une heatmap de similarité cosinus pour un ensemble de mots.
-    
+
     Args:
         embedding: nn.Embedding contenant les poids des mots.
         encoder: dictionnaire mapping words -> indices.
@@ -520,21 +801,38 @@ def plot_similarity_heatmap(embedding: torch.nn.Embedding, encoder: dict, words:
             with torch.no_grad():
                 v1 = embedding(idx1).squeeze(0)  # [D]
                 v2 = embedding(idx2).squeeze(0)  # [D]
-                similarity_matrix[i, j] = F.cosine_similarity(v1.unsqueeze(0), v2.unsqueeze(0)).item()
+                similarity_matrix[i, j] = F.cosine_similarity(
+                    v1.unsqueeze(0), v2.unsqueeze(0)
+                ).item()
 
     # Créer la heatmap
     plt.figure(figsize=figsize)
-    sns.heatmap(similarity_matrix, annot=True, fmt=".2f", cmap="magma",
-                xticklabels=words, yticklabels=words, cbar=True,
-                square=False, linewidths=0.)
-    
+    sns.heatmap(
+        similarity_matrix,
+        annot=True,
+        fmt=".2f",
+        cmap="magma",
+        xticklabels=words,
+        yticklabels=words,
+        cbar=True,
+        square=False,
+        linewidths=0.0,
+    )
+
     plt.title("Heatmap de Similarité Cosinus")
     plt.xlabel("Mots", fontstyle="italic")
     plt.ylabel("Mots", fontstyle="italic")
     plt.savefig("tmp.png")
     plt.show()
 
-def cluster_words(embedding: torch.nn.Embedding, encoder: dict, words: list[str], n_clusters: int = 5, plot: bool = True):
+
+def cluster_words(
+    embedding: torch.nn.Embedding,
+    encoder: dict,
+    words: list[str],
+    n_clusters: int = 5,
+    plot: bool = True,
+):
     """
     Effectue des clusters de mots et affiche les résultats en 3D (Plotly).
     Retour: dict: mots groupés par leurs clusters.
@@ -574,11 +872,16 @@ def cluster_words(embedding: torch.nn.Embedding, encoder: dict, words: list[str]
         df_z = X3[:, 2]
 
         # couleurs par cluster
-        fig = px.scatter_3d(x=df_x, y=df_y, z=df_z,
-                            color=[str(l) for l in labels],
-                            hover_name=words,
-                            title=f'Clustering des mots (KMeans k={n_clusters})',
-                            width=1000, height=800)
+        fig = px.scatter_3d(
+            x=df_x,
+            y=df_y,
+            z=df_z,
+            color=[str(l) for l in labels],
+            hover_name=words,
+            title=f"Clustering des mots (KMeans k={n_clusters})",
+            width=1000,
+            height=800,
+        )
 
         # marqueurs
         fig.update_traces(marker=dict(size=5, opacity=0.8))
@@ -586,12 +889,18 @@ def cluster_words(embedding: torch.nn.Embedding, encoder: dict, words: list[str]
         # Ajouter centroïdes projetés (optionnel)
         centroids = kmeans.cluster_centers_
         centroids_proj = pca.transform(centroids)
-        fig.add_trace(go.Scatter3d(x=centroids_proj[:, 0], y=centroids_proj[:, 1], z=centroids_proj[:, 2],
-                                   mode='markers+text',
-                                   marker=dict(size=8, color='black', symbol='x'),
-                                   text=[f'c{ i }' for i in range(centroids_proj.shape[0])],
-                                   textposition='top center',
-                                   name='centroids'))
+        fig.add_trace(
+            go.Scatter3d(
+                x=centroids_proj[:, 0],
+                y=centroids_proj[:, 1],
+                z=centroids_proj[:, 2],
+                mode="markers+text",
+                marker=dict(size=8, color="black", symbol="x"),
+                text=[f"c{ i }" for i in range(centroids_proj.shape[0])],
+                textposition="top center",
+                name="centroids",
+            )
+        )
 
         # Optionnel : annoter quelques points (décommenter si nécessaire)
         # for i, w in enumerate(words):
@@ -606,17 +915,37 @@ def cluster_words(embedding: torch.nn.Embedding, encoder: dict, words: list[str]
         arrow_len = scale * 0.08
         # axes
         axes = [
-            go.Scatter3d(x=[-scale, scale], y=[0, 0], z=[0, 0], mode='lines',
-                         line=dict(color='red', width=3), name='X axis'),
-            go.Scatter3d(x=[0, 0], y=[-scale, scale], z=[0, 0], mode='lines',
-                         line=dict(color='green', width=3), name='Y axis'),
-            go.Scatter3d(x=[0, 0], y=[0, 0], z=[-scale, scale], mode='lines',
-                         line=dict(color='blue', width=3), name='Z axis'),
+            go.Scatter3d(
+                x=[-scale, scale],
+                y=[0, 0],
+                z=[0, 0],
+                mode="lines",
+                line=dict(color="red", width=3),
+                name="X axis",
+            ),
+            go.Scatter3d(
+                x=[0, 0],
+                y=[-scale, scale],
+                z=[0, 0],
+                mode="lines",
+                line=dict(color="green", width=3),
+                name="Y axis",
+            ),
+            go.Scatter3d(
+                x=[0, 0],
+                y=[0, 0],
+                z=[-scale, scale],
+                mode="lines",
+                line=dict(color="blue", width=3),
+                name="Z axis",
+            ),
         ]
         for a in axes:
             fig.add_trace(a)
 
-        fig.update_layout(scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3'))
+        fig.update_layout(
+            scene=dict(xaxis_title="PC1", yaxis_title="PC2", zaxis_title="PC3")
+        )
         fig.show()
 
     return clusters
