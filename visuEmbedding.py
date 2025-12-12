@@ -539,10 +539,11 @@ def components_to_fig_3D_animation(
     fig : go.Figure
         Animation 3D Plotly
     """
-    if words_display is None:
-        words_display = list(encoder.keys())
+    
 
     if _min is None or _max is None:
+        if words_display is None:
+            words_display = list(encoder.keys())
         idxs = [encoder[w] for w in words_display]
         
         global_max_abs = np.max([np.max(np.abs(comp[idxs])) for comp in history_components])
