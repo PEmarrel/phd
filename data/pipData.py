@@ -1,4 +1,4 @@
-from typing import Callable, Optional, List
+from typing import Callable, Dict, Optional, List, Set
 import unicodedata
 import string
 from nltk.tokenize import word_tokenize
@@ -33,10 +33,6 @@ def pipe_data(
 
     if language not in {"english", "french", None}:
         raise ValueError("language must be 'english' or 'french' or None")
-
-    def remove_accents(text: str) -> str:
-        nk = unicodedata.normalize("NFKD", text)
-        return "".join(ch for ch in nk if not unicodedata.combining(ch))
 
     keep = {"'", "’"} if keep_accent else set()
     base_punct = set(string.punctuation)
@@ -95,3 +91,54 @@ def pipe_data(
         power=power,
         vocab_size_limit=vocab_size_limit
     )
+
+def read_file(file_path: str) -> List[List[str]]:
+    with open(file_path, 'r', encoding='utf-8') as f:
+        sentences = [line.strip().split() for line in f if line.strip()]
+    return sentences
+
+def remove_accents(text: str) -> str:
+    """Normalizes text to remove accents (e.g., 'café' -> 'cafe')."""
+    nk = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in nk if not unicodedata.combining(ch))
+
+def prepare_data(
+    file_path: str,
+    language: str,
+    remove_accent: bool = True,
+    remove_punct: bool = True, # Renamed for clarity
+    keep_apostrophes: bool = True, # Renamed from keep_accent
+    contraction_map: Optional[Dict[str, str]] = None,
+    stop_words: Optional[List[str]] = None
+    ) -> List[List[str]]:
+    if contraction_map is None:
+        contraction_map = {}
+
+    stop_words_set: Set[str] = set(stop_words) if stop_words else set()
+
+    punctuation_chars = set(string.punctuation) | set('“”‘’—–…«»')
+    if keep_apostrophes:
+        punctuation_chars -= {"'", "’"}
+    
+    punct_trans_table = str.maketrans({c: " " for c in punctuation_chars})
+
+    tokens_by_sentence: List[List[str]] = []
+
+    with open(file_path, encoding="utf-8") as f:
+        for line in f:
+            s = line.strip().lower()
+            if not s:
+                continue
+            if remove_accent:
+                s = remove_accents(s)
+            for k, v in contraction_map.items():
+                s = s.replace(k, v)
+            if remove_punct:
+                s = s.translate(punct_trans_table)
+            toks = word_tokenize(s, language=language)
+            if stop_words_set:
+                toks = [t for t in toks if t not in stop_words_set]
+            if toks:
+                tokens_by_sentence.append(toks)
+
+    return tokens_by_sentence
