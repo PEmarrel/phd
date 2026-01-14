@@ -1,3 +1,4 @@
+from typing import List
 import torch
 from torch.utils.data import Dataset
 
@@ -62,9 +63,9 @@ class SGNS_store_DataSet(Dataset):
         super().__init__()
         subsample_thresh = float(subsample_thresh)
         # assert isinstance(sentences, list[list[str]]), "sentences should be a list[list[str]]"
-        assert isinstance(window_size, int), "sentences should be a int"
-        assert isinstance(nb_neg, int), "sentences should be a int"
-        assert isinstance(subsample_thresh, float), "sentences should be a float"
+        assert isinstance(window_size, int), "window_size should be a int"
+        assert isinstance(nb_neg, int), "nb_neg should be a int"
+        assert isinstance(subsample_thresh, float), "subsample_thresh should be a float"
 
         self.sentences:list[list[str]] = sentences
         self.context_size:int = window_size
@@ -85,7 +86,7 @@ class SGNS_store_DataSet(Dataset):
         else:
             self.freq = full_freq
 
-        self.vocab = list(self.freq.keys())
+        self.vocab = sorted(list(self.freq.keys()))
         self.vocab_size:int = len(self.vocab)
         self.encoder:dict = {w:i for i,w in enumerate(self.vocab)}
         self.decoder = {i:w for w,i in self.encoder.items()}
@@ -167,3 +168,88 @@ class SGNS_store_DataSet(Dataset):
         for i in ids :
             words.append(self.decoder[i])
         return words
+
+class W2V_weighted_DataSet(Dataset):
+    def compute_importance(self, words, intonations):
+        dict_list_importance = {}
+        for sentence, intonation in zip(words, intonations) :
+            for index, inton in enumerate(intonation):
+                if sentence[index] not in dict_list_importance :
+                    dict_list_importance[sentence[index]] = [float(inton)]
+                else :
+                    dict_list_importance[sentence[index]].append(float(inton))
+
+        dict_importance = {}
+        for word in dict_list_importance :
+            dict_importance[word] = sum(dict_list_importance[word]) / len(dict_list_importance[word])
+
+        return dict_importance
+    
+    def _get_unigram_dist(self):
+        """Compute unigram distribution depending on word importance"""
+        weight_list = [self.word_importance[token] for token in range(len(self.encoder)) ]
+        unigram = torch.tensor([weight for weight in weight_list], dtype=torch.float)
+        return unigram / unigram.sum()
+
+    
+    def _make_pairs_positif(self):
+        pairs = []
+        for sent, intonation in zip(self.sentences, self.intonations):
+            ids = self.encode(sent)
+            L = len(ids)
+            for i, center in enumerate(ids):
+                cur_window = self.context_size
+                start = max(0, i - cur_window)
+                end = min(L, i + cur_window + 1)
+                for j in range(start, end):
+                    if j == i:
+                        continue
+                    context = ids[j]
+                    pairs.append((center, context, intonation[i]))
+        return pairs
+    
+    def __init__(self, sentences:list[list[str]], intonations:List[List[float]] , window_size:int=2, nb_neg:int=5):
+        super().__init__()
+        
+        assert len(sentences) == len(intonations), f"Error: Sentences and intonations must have the same length."
+
+        all_tokens = [t for sentence in sentences for t in sentence if t.isalpha()]
+        self.vocab = list(set(all_tokens))
+        self.encoder:dict = {w:i for i,w in enumerate(self.vocab)}
+        self.decoder:dict = {i:w for i,w in enumerate(self.vocab)}
+        self.context_size:int = window_size
+        self.sentences = sentences
+        self.intonations = intonations
+        self.K = nb_neg
+        
+        self.tokens = []
+        for s in sentences :
+            self.tokens.append([])
+            for w in s :
+                self.tokens[-1] .append(self.encoder[w])
+
+        self.word_importance:dict = self.compute_importance(self.tokens, intonations)
+        self.unigram_dist = self._get_unigram_dist()
+        self.pairs:List = self._make_pairs_positif()
+
+    def encode(self, words:list|str) -> list|int:
+        if isinstance(words, str) : return self.encoder[words]
+        ids = []
+        for w in words :
+            ids.append(self.encoder[w])
+        return ids
+    
+    def decode(self, ids:list|int) -> list|int:
+        if isinstance(ids, int) : return self.decoder[ids]
+        words = []
+        for i in ids :
+            words.append(self.decoder[i])
+        return words
+
+    def __getitem__(self, idx:int):
+        center, pos, intonation = self.pairs[idx]
+        neg = torch.multinomial(self.unigram_dist, self.K, replacement=True)
+        return center, pos, neg, intonation
+    
+    def __len__(self):
+        return len(self.pairs)
