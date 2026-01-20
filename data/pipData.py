@@ -148,8 +148,6 @@ def prepare_data(
 
     return tokens_by_sentence
 
-
-
 def prepare_data_with_intonation(
     file_path: str,
     language: str,
@@ -161,6 +159,31 @@ def prepare_data_with_intonation(
     break_line: bool = True,
     expand_is_contraction: bool = True
     ) -> List[List[str]]:
+    """
+    Read a file in this format :
+    word (str) intonation (int)
+    
+    :param file_path: 
+    :type file_path: str
+    :param language: Description
+    :type language: str
+    :param remove_accent: Description
+    :type remove_accent: bool
+    :param remove_punct: Description
+    :type remove_punct: bool
+    :param keep_apostrophes: Description
+    :type keep_apostrophes: bool
+    :param contraction_map: Description
+    :type contraction_map: Optional[Dict[str, str]]
+    :param stop_words: Description
+    :type stop_words: Optional[List[str]]
+    :param break_line: Description
+    :type break_line: bool
+    :param expand_is_contraction: Description
+    :type expand_is_contraction: bool
+    :return: Description
+    :rtype: List[List[str]]
+    """
 
     sentence_split_re = re.compile(r'[\.!\?]+')
     

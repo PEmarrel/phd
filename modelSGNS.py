@@ -4,6 +4,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset
 
+from typing import Sequence, Optional, Callable, List, Dict
+
 
 class SkipGramModel(nn.Module):
     def __init__(self, emb_size:int, embedding_dimension:int=15, context_dimension:int|None=None, init_range:float|None=None, sparse:bool=True, device="cpu"):
@@ -160,3 +162,33 @@ def train_Word2Vec(modelW2V:nn.Module, dataLoader:Dataset, optimizer:optim.Optim
         if verbal : print(f"Epoch {epoch} finished. Avg loss: {avg_epoch_loss:.6f}")
 
     return {"loss_history": loss_history, "final_epoch_loss": avg_epoch_loss}
+
+class SGNS_OneEmbWeighted(nn.Module):
+    """
+    Use only one embedding and apply a weight in loss :
+    loss = -((pos_loss + neg_loss) * weights).mean()
+    """
+    def __init__(self, emb_size:int, embedding_dimension:int=15, init_range:float|None=None, sparse:bool=True, device="cpu"):
+        super().__init__()
+        self.emb_size:int = emb_size
+        self.emb_dim:int = embedding_dimension
+        self.word_emb:nn.Embedding = nn.Embedding(num_embeddings=self.emb_size, embedding_dim=self.emb_dim, device=device, sparse=sparse)
+
+        if init_range is None:
+            init_range = 0.5 / self.emb_dim
+        self.word_emb.weight.data.uniform_(-init_range, init_range)
+
+    def forward(self, centrals_words:torch.Tensor, pos_context:torch.Tensor, neg_context:torch.Tensor,
+                weights:torch.Tensor):
+        words_emb:torch.Tensor = self.word_emb(centrals_words) # [B, D]
+        context_emb:torch.Tensor = self.word_emb(pos_context) # [B, D]
+        neg_emb:torch.Tensor = self.word_emb(neg_context) # [B, K, D]
+
+        pos_score = torch.sum(words_emb * context_emb, dim=1)
+        pos_loss = F.logsigmoid(pos_score)
+
+        neg_score = torch.bmm(neg_emb, words_emb.unsqueeze(-1)).squeeze(2)
+        neg_loss = F.logsigmoid(-neg_score).sum(1)
+        loss = -((pos_loss + neg_loss) * weights).mean()
+        
+        return loss

@@ -253,3 +253,29 @@ class W2V_weighted_DataSet(Dataset):
     
     def __len__(self):
         return len(self.pairs)
+
+class W2V_weighted_DataSet_v2(W2V_weighted_DataSet):
+    
+    def _make_pairs_positif(self):
+        pairs = []
+        for sent, intonation in zip(self.sentences, self.intonations):
+            ids = self.encode(sent)
+            L = len(ids)
+            for i, center in enumerate(ids):
+                cur_window = self.context_size
+                start = max(0, i - cur_window)
+                end = min(L, i + cur_window + 1)
+                for j in range(start, end):
+                    if j == i:
+                        continue
+                    context = ids[j]
+                    pairs.append((center, context, intonation[i], intonation[j]))
+        return pairs
+    
+    def __init__(self, sentences:list[list[str]], intonations:List[List[float]] , window_size:int=2, nb_neg:int=5):
+        super().__init__(sentences, intonations, window_size, nb_neg)
+        
+    def __getitem__(self, idx:int):
+        center, pos, into_center, into_pos = self.pairs[idx]
+        neg = torch.multinomial(self.unigram_dist, self.K, replacement=True)
+        return center, pos, neg, into_center, into_pos

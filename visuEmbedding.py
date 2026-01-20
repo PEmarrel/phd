@@ -360,7 +360,7 @@ def components_to_fig_3D(
                     marker=dict(size=4, color=color_word, symbol="diamond"),
                     text=[w],
                     textposition="top center",
-                    name=f"query {w}",
+                    name=f"{w}",
                 )
             )
 
@@ -519,25 +519,6 @@ def components_to_fig_3D_animation(
     base_color: dict = {},
 ) -> go.Figure:
     """
-    Crée une animation 3D de l'évolution de l'embedding.
-    Utilise ta fonction existante components_to_fig_3D pour chaque frame.
-
-    ----------
-    INPUT :
-    ----------
-    history_components : list[np.ndarray]
-        Liste d'embeddings successifs (N,3)
-    encoder : dict
-    words_display : list[str] or None
-    highlight_words : list[str] or None
-    nb_neighbors : int
-    title : str
-
-    ----------
-    OUTPUT :
-    ----------
-    fig : go.Figure
-        Animation 3D Plotly
     """
     
 
@@ -632,17 +613,7 @@ def interactive_embedding_plot_2D(
     title: Optional[str] = None,
 ):
     """
-    Trace un scatter interactif (Plotly) des embeddings.
-    - embedding: nn.Embedding (poids seront copiés en cpu)
-    - encoder: dict word -> idx
-    - words: séquence de mots à afficher (par défaut tous les mots de encoder)
-    - method: 'pca' ou 'tsne'
-    - tsne_params: dict de paramètres passés à TSNE si method == 'tsne'
-    - top_k_neighbors: nombre de voisins affichés si query_word spécifié
-    - query_word: si fourni, on le met en évidence et on affiche ses k voisins les plus proches
-    - show_only: si fourni, restreint l'affichage à cette liste de mots
-    - title: titre du graphique
-    Retour: Plotly Figure (affiche inline si en notebook)
+
     """
     # Préparer la liste de mots à afficher
     if words is None:
