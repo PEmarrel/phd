@@ -48,16 +48,18 @@ class SGNS_store_DataSet(Dataset):
                     self.pairs.append((center, context))
 
     def __init__(self, sentences:list[list[str]], window_size:int=2, nb_neg:int=5, power=0.75,
-                 subsample_thresh:float=1e-5 , vocab_freq:None|dict|Counter=None, vocab_size_limit:None|int=None):
+                subsample_thresh:float=1e-5 , vocab_freq:None|dict|Counter=None, vocab_size_limit:None|int=None):
         """Initialise le dataset pour du Word2Vec avec des pairs négative. (Warning Méthode qui stocke en mémoire)
         
         Args:
             sentences: Liste des phrases du corpus de texte (une phrases doit être une liste de str)
             window_size: La taille de fenêtre pour créer les pairs positif.
             nb_neg: Nombre de pair négatif pour chaque mots. (K)
-            subsample_thresh: Pour réduire la fréquence des mots trop fréquent (Ex : de, le, la, ...) dans le choix des mots centraux
+            subsample_thresh: Pour réduire la fréquence des mots trop fréquent (Ex : de, le, la, ...) dans le choix des 
+            mots centraux
             power: Pour réduire la fréquence des mots trop fréquent dans les négatifs
-            vocab_freq: Dictionnaire ou counter (https://docs.python.org/3/library/collections.html#counter-objects) pour chaque mots indique la fréquence de se mot dans tout le corpus
+            vocab_freq: Dictionnaire ou counter (https://docs.python.org/3/library/collections.html#counter-objects) 
+            pour chaque mots indique la fréquence de se mot dans tout le corpus
             vocab_size_limit: Pour ne garder que les top-N mots par fréquence
         """
         super().__init__()
@@ -117,7 +119,8 @@ class SGNS_store_DataSet(Dataset):
         return neg.view(batch_size, self.K)    
 
     def __getitem__(self, idx):
-        """Prends la pairs positif idx (idx >= 0 and idx < len(self.pairs) et les négatifs qui sont calculé avec la distribution unigram
+        """Prends la pairs positif idx (idx >= 0 and idx < len(self.pairs) et les négatifs qui sont calculé avec
+        la distribution unigram
 
         Args:
             idx: Index de la pairs positifs.
@@ -279,3 +282,97 @@ class W2V_weighted_DataSet_v2(W2V_weighted_DataSet):
         center, pos, into_center, into_pos = self.pairs[idx]
         neg = torch.multinomial(self.unigram_dist, self.K, replacement=True)
         return center, pos, neg, into_center, into_pos
+
+class dataset_weighted(Dataset):
+    def _compute_importance(self, words, poids):
+        dict_list_importance:dict[int , list[float]] = {}
+        for sentence, intonation in zip(words, poids) :
+            for index, inton in enumerate(intonation):
+                if sentence[index] not in dict_list_importance :
+                    dict_list_importance[sentence[index]] = [float(inton)]
+                else :
+                    dict_list_importance[sentence[index]].append(float(inton))
+
+        dict_importance:dict[int, float] = {}
+        for word in dict_list_importance :
+            dict_importance[word] = sum(dict_list_importance[word]) / len(dict_list_importance[word])
+
+        return dict_importance
+    
+    def _dist_unigram(self, power:float):
+        freq_list = [self.freq[self.decoder[i]] for i in range(self.vocab_size)]
+        unigram = torch.tensor([f**power for f in freq_list], dtype=torch.float)
+        return unigram / unigram.sum()
+    
+    def _make_pairs_positif(self):
+        pairs: list[tuple[int, int, float]] = []
+        
+        for ids, intonation_list in zip(self.tokens, self.intonations):
+            L = len(ids)
+            for i, center in enumerate(ids):
+                start = max(0, i - self.context_size)
+                end = min(L, i + self.context_size + 1)
+                
+                current_weight = float(intonation_list[i]) 
+                
+                for j in range(start, end):
+                    if j == i:
+                        continue
+                    context = ids[j]
+                    pairs.append((center, context, current_weight))
+        return pairs
+    
+    def __init__(self, sentences:list[list[str]], intonations:list[list[float]] , window_size:int=2, nb_neg:int=5, power:float=0.75):
+        super().__init__()
+        
+        assert len(sentences) == len(intonations), "Error: Sentences and intonations must have the same length."
+
+        all_tokens = [t for sentence in sentences for t in sentence]
+        self.freq = Counter(all_tokens)
+        self.vocab = list(self.freq.keys())
+        self.vocab_size = len(self.vocab)
+        
+        self.encoder: dict = {w: i for i, w in enumerate(self.vocab)}
+        self.decoder: dict = {i: w for i, w in enumerate(self.vocab)}
+        
+        self.context_size: int = window_size
+        self.K: int = nb_neg
+        
+        self.tokens: list[list[int]] = []
+        for s in sentences:
+            self.tokens.append([self.encoder[w] for w in s])
+            
+        self.intonations = intonations
+
+        self.unigram_dist = self._dist_unigram(power)
+        
+        self.pairs: list[tuple[int, int, float]] = self._make_pairs_positif()
+
+    def encode(self, words:list[str]|str) -> list[int]|int:
+        if isinstance(words, str) : return self.encoder[words]
+        ids = []
+        for w in words :
+            ids.append(self.encoder[w])
+        return ids
+    
+    def decode(self, ids:list[int]|int) -> list[str]|str:
+        if isinstance(ids, int) : return self.decsoder[ids]
+        words = []
+        for i in ids :
+            words.append(self.decoder[i])
+        return words
+
+    def __getitem__(self, idx:int):
+        center, pos, intonation = self.pairs[idx]
+        neg = torch.multinomial(self.unigram_dist, self.K, replacement=True)
+        
+        return (
+            torch.tensor(center, dtype=torch.long), 
+            torch.tensor(pos, dtype=torch.long), 
+            neg, 
+            torch.tensor(intonation, dtype=torch.float)
+        )
+    
+    def __len__(self):
+        return len(self.pairs)
+    
