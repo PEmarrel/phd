@@ -921,3 +921,98 @@ def cluster_words(
         fig.show()
 
     return clusters
+
+def components_to_fig_3D_simple(
+    components: np.ndarray,
+    encoder: dict,
+    base_color: dict = None,
+    default_color: str = "lightgray",
+    default_opacity:float =0.1,
+    title: str = "3D Representation of Vectors",
+    _min: Optional[float] = None,
+    _max: Optional[float] = None,
+) -> go.Figure:
+    
+    if base_color is None:
+        base_color = {}
+
+    idx_to_word = {idx: word for word, idx in encoder.items()}
+    words_ordered = [idx_to_word.get(i, f"vec_{i}") for i in range(components.shape[0])]
+
+    xs = components[:, 0]
+    ys = components[:, 1]
+    zs = components[:, 2]
+
+    # Handle axes limits
+    if _min is None or _max is None:
+        max_abs_val = np.max(np.abs(components))
+        limit = max_abs_val * 1.1
+        if _min is None: _min = -limit
+        if _max is None: _max = limit
+
+    fig = go.Figure()
+
+    # --- 1. Plot Background (Other Vectors) ---
+    bg_idx = [i for i, w in enumerate(words_ordered) if w not in base_color]
+    if bg_idx:
+        fig.add_trace(go.Scatter3d(
+            x=xs[bg_idx], y=ys[bg_idx], z=zs[bg_idx],
+            mode="markers",
+            marker=dict(size=3, color=default_color, opacity=default_opacity), # Low opacity
+            hovertext=[words_ordered[i] for i in bg_idx],
+            hoverinfo="text",
+            name="Other words",
+            showlegend=True 
+        ))
+
+    # --- 2. Plot Highlighted Words (Builds the Legend) ---
+    for word, color in base_color.items():
+        # Find index of the word (handles in case it's missing or appears multiple times)
+        word_idx = [i for i, w in enumerate(words_ordered) if w == word]
+        if word_idx:
+            fig.add_trace(go.Scatter3d(
+                x=xs[word_idx], y=ys[word_idx], z=zs[word_idx],
+                mode="markers",
+                marker=dict(size=6, color=color, opacity=1.0), # Full opacity, slightly larger
+                hovertext=[word] * len(word_idx),
+                hoverinfo="text",
+                name=word # This adds the word to the legend
+            ))
+
+    # --- 3. Axes and Arrows (Unchanged) ---
+    max_range = np.max(np.ptp(components, axis=0)) if np.max(np.ptp(components, axis=0)) != 0 else 1.0
+    scale = max_range * 0.05
+
+    axes_traces = [
+        go.Scatter3d(x=[-scale, scale], y=[0, 0], z=[0, 0], mode="lines", line=dict(color="red", width=4), showlegend=False),
+        go.Scatter3d(x=[0, 0], y=[-scale, scale], z=[0, 0], mode="lines", line=dict(color="green", width=4), showlegend=False),
+        go.Scatter3d(x=[0, 0], y=[0, 0], z=[-scale, scale], mode="lines", line=dict(color="blue", width=4), showlegend=False),
+    ]
+
+    arrow_len = scale * 0.008
+    arrow_traces = [
+        go.Scatter3d(x=[scale, scale - arrow_len], y=[0, 0], z=[0, 0], mode="lines", line=dict(color="red", width=6), showlegend=False),
+        go.Scatter3d(x=[0, 0], y=[scale, scale - arrow_len], z=[0, 0], mode="lines", line=dict(color="green", width=6), showlegend=False),
+        go.Scatter3d(x=[0, 0], y=[0, 0], z=[scale, scale - arrow_len], mode="lines", line=dict(color="blue", width=6), showlegend=False)
+    ]
+    
+    labels_traces = [
+        go.Scatter3d(x=[scale], y=[0], z=[0], mode="text", text=["X"], textposition="top center", showlegend=False),
+        go.Scatter3d(x=[0], y=[scale], z=[0], mode="text", text=["Y"], textposition="top center", showlegend=False),
+        go.Scatter3d(x=[0], y=[0], z=[scale], mode="text", text=["Z"], textposition="top center", showlegend=False)
+    ]
+
+    for t in axes_traces + arrow_traces + labels_traces:
+        fig.add_trace(t)
+
+    fig.update_layout(
+        title=title, width=1000, height=800,
+        scene=dict(
+            xaxis=dict(nticks=4, range=[_min, _max], title="PC1"),
+            yaxis=dict(nticks=4, range=[_min, _max], title="PC2"),
+            zaxis=dict(nticks=4, range=[_min, _max], title="PC3"),
+        ),
+        scene_aspectmode="cube",
+    )
+    
+    return fig

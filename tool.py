@@ -11,6 +11,9 @@ from scipy.stats import skew
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
 
+from scipy.cluster.hierarchy import linkage, fcluster
+import scipy.spatial.distance as ssd
+
 
 def DicToJson(dic: dict, path: str):
     """
@@ -244,3 +247,115 @@ def normalize_range_center(intonations:List[List[int]], range_normalize:float=1.
         normalized_intonations.append(normalized_sentence)
 
     return normalized_intonations
+
+
+def make_binary(intonations: List[List[int]], threshold: float = None, zero_value:int=0, one_value:int=0) -> List[List[float]]:
+    """
+    Convert intonation values to binary representation based on a threshold.
+    This function takes a list of intonation values organized by sentences and converts
+    each value to either a zero_value or one_value based on comparison with a threshold.
+    If no threshold is provided, it defaults to the mean of all intonation values.
+    Args:
+        intonations (List[List[int]]): A 2D list where each sublist contains intonation
+            values for a sentence.
+        threshold (float, optional): The cutoff value for binary conversion. Values >= threshold
+            are converted to one_value, values < threshold are converted to zero_value.
+            If None, defaults to the mean of all intonation values. Defaults to None.
+        zero_value (int, optional): The value to assign for intonations below the threshold.
+            Defaults to 0.
+        one_value (int, optional): The value to assign for intonations at or above the threshold.
+            Defaults to 0.
+    Returns:
+        List[List[float]]: A 2D list with the same structure as intonations, where each
+            value has been converted to either zero_value or one_value based on the threshold.
+    Raises:
+        AssertionError: If all intonation values are identical (max_inton == min_inton).
+    Example:
+        >>> intonations = [[100, 150, 120], [90, 110]]
+        >>> make_binary(intonations, zero_value=0, one_value=1)
+        [[0, 1, 0], [0, 1]]
+    """
+    all_intonations = [inton for sublist in intonations for inton in sublist]
+    
+    if not all_intonations:
+        return []
+        
+    min_inton = min(all_intonations)
+    max_inton = max(all_intonations)
+    assert max_inton > min_inton, "Error: All intonation values are the same."
+
+    if threshold is None:
+        threshold = sum(all_intonations) / len(all_intonations)
+
+    binary_intonations = []
+    for sentence in intonations:
+        binary_sentence = [one_value if inton >= threshold else zero_value for inton in sentence]
+        binary_intonations.append(binary_sentence)
+
+    return binary_intonations
+
+def create_all_clusters(all_cosine_similarity: pd.DataFrame, min_similarity: float = 0.5) -> dict[int, list[str]]:
+    """
+    Performs hierarchical agglomerative clustering on a similarity matrix.
+
+    Args:
+        all_cosine_similarity (pd.DataFrame): The pairwise similarity matrix from `create_cos_similarity`.
+        min_similarity (float): The minimum similarity required for words to be grouped together. 
+                                A higher value (e.g., 0.8) creates smaller, tighter clusters.
+
+    Returns:
+        Dict[int, List[str]]: A dictionary mapping a unique cluster ID (int) to its list of words.
+    """
+    dist_matrix = 1.0 - all_cosine_similarity.values
+    np.fill_diagonal(dist_matrix, 0.0) 
+    
+    condensed_dist = ssd.squareform(dist_matrix)
+    Z = linkage(condensed_dist, method='complete')
+    distance_threshold = 1.0 - min_similarity
+    cluster_labels = fcluster(Z, t=distance_threshold, criterion='distance')
+    
+    clusters: dict[int, list[str]] = {}
+    words = all_cosine_similarity.index
+    
+    for word, label in zip(words, cluster_labels):
+        if label not in clusters:
+            clusters[label] = []
+        clusters[label].append(word)
+        
+    return clusters
+    
+def find_good_clusters(clusters: dict[int, list[str]], df_similarity: pd.DataFrame, min_words: int) -> list[tuple[int, float, list[str]]]:
+    """
+    Filters clusters by size and calculates the average internal cohesion (tightness) of each.
+
+    Args:
+        clusters (Dict[int, List[str]]): The output from `create_all_clusters`.
+        df_similarity (pd.DataFrame): The original similarity matrix.
+        min_words (int): The minimum number of words a cluster must contain to be kept.
+
+    Returns:
+        List[Tuple[int, float, List[str]]]: A list of valid clusters sorted by cohesion (highest first).
+                                            Format: [(cluster_id, avg_similarity, word_list), ...]
+    """
+    valid_clusters = []
+    
+    for cluster_id, words in clusters.items():
+        if len(words) >= min_words:
+            sub_matrix = df_similarity.loc[words, words]
+            mask = np.triu(np.ones(sub_matrix.shape), k=1).astype(bool)
+            
+            avg_similarity = sub_matrix.values[mask].mean()
+            std_similarity = sub_matrix.values[mask].std()
+            
+            valid_clusters.append((cluster_id, avg_similarity, std_similarity, words))
+            
+    valid_clusters.sort(key=lambda x: x[1], reverse=True)
+            
+    return valid_clusters
+
+def compute_all_sim(vecs:np.ndarray, words):
+    norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+    vecs_normalized:np.ndarray = vecs / (norms + 1e-10)
+    similarity_matrix = np.dot(vecs_normalized, vecs_normalized.T)
+    return pd.DataFrame(similarity_matrix, columns=words, index=words)
+
