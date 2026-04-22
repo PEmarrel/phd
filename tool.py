@@ -228,9 +228,12 @@ def analyser_anisotropie_advanced(embeddings, max_samples=10000):
         "pc1_alignment": alignment_pc1.mean()
     }
     
-def normalize_range_center(intonations:List[List[int]], range_normalize:float=1.0, 
+def normalize_range_center(intonations:List[List[int]] | List[int], range_normalize:float=1.0, 
                            center:float=1.0) -> List[List[float]]:
-    all_intonations = [inton for sublist in intonations for inton in sublist]
+    if isinstance(intonations[0], list):
+        all_intonations = [inton for sublist in intonations for inton in sublist]
+    else :
+        all_intonations = intonations
     min_inton = min(all_intonations) # Find the minimum intonation value
     max_inton = max(all_intonations) # Find the maximum intonation value
     assert max_inton > min_inton, "Error: All intonation values are the same."
@@ -248,31 +251,41 @@ def normalize_range_center(intonations:List[List[int]], range_normalize:float=1.
 
     return normalized_intonations
 
-
 def make_binary(intonations: List[List[int]], threshold: float = None, zero_value:int=0, one_value:int=0) -> List[List[float]]:
     """
     Convert intonation values to binary representation based on a threshold.
     This function takes a list of intonation values organized by sentences and converts
     each value to either a zero_value or one_value based on comparison with a threshold.
     If no threshold is provided, it defaults to the mean of all intonation values.
-    Args:
-        intonations (List[List[int]]): A 2D list where each sublist contains intonation
-            values for a sentence.
-        threshold (float, optional): The cutoff value for binary conversion. Values >= threshold
-            are converted to one_value, values < threshold are converted to zero_value.
-            If None, defaults to the mean of all intonation values. Defaults to None.
-        zero_value (int, optional): The value to assign for intonations below the threshold.
-            Defaults to 0.
-        one_value (int, optional): The value to assign for intonations at or above the threshold.
-            Defaults to 0.
-    Returns:
-        List[List[float]]: A 2D list with the same structure as intonations, where each
-            value has been converted to either zero_value or one_value based on the threshold.
-    Raises:
-        AssertionError: If all intonation values are identical (max_inton == min_inton).
+    
+    Parameters
+    ----------
+    intonations : List[List[int]]
+        A 2D list where each sublist contains intonation values for a sentence.
+    threshold : float, optional
+        The cutoff value for binary conversion. Values >= threshold
+        are converted to one_value, values < threshold are converted to zero_value.
+        If None, defaults to the mean of all intonation values. Defaults to None.
+    zero_value : int, optional
+        The value to assign for intonations below the threshold. Defaults to 0.
+    one_value : int, optional
+        The value to assign for intonations at or above the threshold. Defaults to 0.
+    
+    Returns
+    -------
+    List[List[float]]
+        A 2D list with the same structure as intonations, where each
+        value has been converted to either zero_value or one_value based on the threshold.
+    
+    Raises
+    -------
+    AssertionError: 
+        If all intonation values are identical (max_inton == min_inton).
+        
     Example:
-        >>> intonations = [[100, 150, 120], [90, 110]]
-        >>> make_binary(intonations, zero_value=0, one_value=1)
+    -------
+    >>> intonations = [[100, 150, 120], [90, 110]]
+    >>> make_binary(intonations, zero_value=0, one_value=1)
         [[0, 1, 0], [0, 1]]
     """
     all_intonations = [inton for sublist in intonations for inton in sublist]
@@ -353,7 +366,7 @@ def find_good_clusters(clusters: dict[int, list[str]], df_similarity: pd.DataFra
             
     return valid_clusters
 
-def compute_all_sim(vecs:np.ndarray, words):
+def compute_all_sim(vecs:np.ndarray, words:list[str])-> pd.DataFrame:
     norms = np.linalg.norm(vecs, axis=1, keepdims=True)
     vecs_normalized:np.ndarray = vecs / (norms + 1e-10)
     similarity_matrix = np.dot(vecs_normalized, vecs_normalized.T)

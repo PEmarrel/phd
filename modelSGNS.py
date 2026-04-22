@@ -91,6 +91,14 @@ class SkipGramModel(nn.Module):
         self.word_emb:nn.Embedding = nn.Embedding.from_pretrained(word_weights)
         self.con_emb:nn.Embedding = nn.Embedding.from_pretrained(con_weight)
         
+    def init_model(self):
+        with torch.no_grad():
+            self.word_emb.weight.data.uniform_(-self.init_range, self.init_range)
+            self.con_emb.weight.data.uniform_(-self.init_range, self.init_range)
+
+    def get_embedding(self):
+        return self.word_emb.weight.detach().cpu().numpy()
+            
 class OnlyOneEmb(nn.Module):
     def __init__(self, emb_size:int, embedding_dimension:int=15, init_range:float|None=None, 
                 sparse:bool=True, device="cpu"):
@@ -128,6 +136,14 @@ class OnlyOneEmb(nn.Module):
     def load_weight(self, path:str="SGNS_weights/", name_word_weights:str="word_embedding.pt"):
         word_weights = torch.load(path + name_word_weights)
         self.word_emb:nn.Embedding = nn.Embedding.from_pretrained(word_weights)
+        
+    
+    def init_model(self):
+        with torch.no_grad():
+            self.word_emb.weight.data.uniform_(-self.init_range, self.init_range)
+
+    def get_embedding(self):
+        return self.word_emb.weight.detach().cpu().numpy()
 
 # La fonction d’entraînement classique
 def train_Word2Vec(modelW2V:nn.Module, dataLoader:Dataset, optimizer:optim.Optimizer, epochs:int, 
@@ -207,6 +223,14 @@ class SGNS_OneEmbWeighted(nn.Module):
         loss = -((pos_loss + neg_loss) * weights).mean()
         
         return loss
+    
+    def init_model(self):
+        with torch.no_grad():
+            self.word_emb.weight.data.uniform_(-self.init_range, self.init_range)
+            
+    def get_embedding(self):
+        return self.word_emb.weight.detach().cpu().numpy()
+
 
 
 class SGNS_Weighted(nn.Module):
@@ -251,3 +275,11 @@ class SGNS_Weighted(nn.Module):
         loss = -((pos_loss + neg_loss) * weights).mean()
         
         return loss
+    
+    def init_model(self):
+        with torch.no_grad():
+            self.word_emb.weight.data.uniform_(-self.init_range, self.init_range)
+            self.con_emb.weight.data.uniform_(-self.init_range, self.init_range)
+
+    def get_embedding(self):
+        return self.word_emb.weight.detach().cpu().numpy()

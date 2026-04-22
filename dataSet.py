@@ -322,7 +322,7 @@ class dataset_weighted(Dataset):
                     pairs.append((center, context, current_weight))
         return pairs
     
-    def __init__(self, sentences:list[list[str]], intonations:list[list[float]] , window_size:int=2, nb_neg:int=5, power:float=0.75):
+    def __init__(self, sentences:list[list[str]], intonations:list[list[float]], window_size:int=2, nb_neg:int=5, power:float=0.75):
         super().__init__()
         
         assert len(sentences) == len(intonations), "Error: Sentences and intonations must have the same length."
@@ -356,7 +356,7 @@ class dataset_weighted(Dataset):
         return ids
     
     def decode(self, ids:list[int]|int) -> list[str]|str:
-        if isinstance(ids, int) : return self.decsoder[ids]
+        if isinstance(ids, int) : return self.decoder[ids]
         words = []
         for i in ids :
             words.append(self.decoder[i])

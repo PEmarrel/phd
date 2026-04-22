@@ -295,6 +295,14 @@ def components_to_fig_3D(
     _min: float | None = None,
     _max: float | None = None,
     base_color: dict = {},
+    default_point_color: str = "lightgray",
+    default_point_opacity:float = 0.5,
+    legend_axis_X:str='c1',
+    legend_axis_Y:str='c2',
+    legend_axis_Z:str='c3',
+    text_point:list[str]|None = None,
+    text_size:int = 6,
+    ticksize:int= 10
 ) -> go.Figure:
     """ """
     if words_display is None:
@@ -320,11 +328,14 @@ def components_to_fig_3D(
             _max = limit
 
     fig: go.Figure = px.scatter_3d(
-        x=xs, y=ys, z=zs, hover_name=words_display, title=title, width=1000, height=800
+        x=xs, y=ys, z=zs, hover_name=words_display, title=title, width=1000, height=800, opacity=default_point_opacity
     )
 
     # add invisible text markers for readability; show points as small markers
-    fig.update_traces(marker=dict(size=4, opacity=0.8))
+    # fig.update_traces(marker=dict(size=4, opacity=0.8))
+    fig.update_traces(marker=dict(size=4, opacity=default_point_opacity, color=default_point_color, symbol='cross'))
+    fig.update_layout(scene=dict(bgcolor="white"))
+    
 
     # If query_word provided, highlight it and its neighbors
     pos_map = {w: i for i, w in enumerate(words_display)}
@@ -343,43 +354,77 @@ def components_to_fig_3D(
             order = np.argsort(-sims)
             # keep top_k_neighbors (including query if in list)
             topk = order[:nb_neighbors]
-            # build lines to neighbors and highlight markers
-            # neighbor_words = [words_display[i] for i in topk]
             neighbor_sims = sims[topk]
 
             # highlight query point (if it's in displayed words)
             qpos = pos_map.get(w, None)
             if qpos is None:
                 continue
-            fig.add_trace(
-                go.Scatter3d(
-                    x=[xs[qpos]],
-                    y=[ys[qpos]],
-                    z=[zs[qpos]],
-                    mode="markers+text",
-                    marker=dict(size=4, color=color_word, symbol="diamond"),
-                    text=[w],
-                    textposition="top center",
-                    name=f"{w}",
+            
+            if color_word == "red":
+                s = "circle"
+            elif color_word == "blue":
+                s = "diamond"
+            elif color_word == "green":
+                s = "square"
+                
+            if text_point and w not in text_point:
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=[xs[qpos]],
+                        y=[ys[qpos]],
+                        z=[zs[qpos]],
+                        marker=dict(size=4, color=color_word, symbol=s),
+                        textposition="top center",
+                        name=f"{w}",
+                    )
                 )
-            )
+            else:
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=[xs[qpos]],
+                        y=[ys[qpos]],
+                        z=[zs[qpos]],
+                        mode="markers+text",
+                        marker=dict(size=4, color=color_word, symbol=s),
+                        text=[w],
+                        textposition="top center",
+                        name=f"{w}",
+                        textfont=dict(size=text_size)
+                    )
+                )
 
             # draw neighbors and lines
             for i, ni in enumerate(topk):
                 if words_display[ni] == w:
                     continue
-                fig.add_trace(
-                    go.Scatter3d(
-                        x=[xs[ni]],
-                        y=[ys[ni]],
-                        z=[zs[ni]],
-                        mode="markers+text",
-                        marker=dict(size=6, color=color_neighbor),
-                        text=[words_display[ni]],
-                        textposition="top center",
-                        name=f"neighbor_{i} (sim={neighbor_sims[i]:.3f}) {words_display[ni]}",
+                
+                if text_point and words_display[ni] not in text_point:
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=[xs[ni]],
+                            y=[ys[ni]],
+                            z=[zs[ni]],
+                            marker=dict(size=6, color=color_neighbor),
+                            textposition="top center",
+                            name=f"neighbor_{i} (sim={neighbor_sims[i]:.3f}) {words_display[ni]}",
+                        )
                     )
-                )
+                
+                else:
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=[xs[ni]],
+                            y=[ys[ni]],
+                            z=[zs[ni]],
+                            mode="markers+text",
+                            marker=dict(size=6, color=color_neighbor),
+                            text=[words_display[ni]],
+                            textposition="top center",
+                            name=f"neighbor_{i} (sim={neighbor_sims[i]:.3f}) {words_display[ni]}",
+                            testfont=go.scatter3d.Textfont(size=text_size)
+                        )
+                    )
 
                 # line from query to neighbor if query is displayed
                 if w in words_display:
@@ -498,9 +543,9 @@ def components_to_fig_3D(
 
     fig.update_layout(
         scene=dict(
-            xaxis=dict(nticks=4, range=[_min, _max], title="PC1"),
-            yaxis=dict(nticks=4, range=[_min, _max], title="PC2"),
-            zaxis=dict(nticks=4, range=[_min, _max], title="PC3"),
+            xaxis=dict(nticks=4, range=[_min, _max], title=dict(text=legend_axis_X, font=dict(size=text_size)), tickfont=dict(size=ticksize)),
+            yaxis=dict(nticks=4, range=[_min, _max], title=dict(text=legend_axis_Y, font=dict(size=text_size)), tickfont=dict(size=ticksize)),
+            zaxis=dict(nticks=4, range=[_min, _max], title=dict(text=legend_axis_Z, font=dict(size=text_size)), tickfont=dict(size=ticksize)),
         ),
         scene_aspectmode="cube",
     )
